@@ -18,3 +18,5 @@ xmake
 * VS2022 build tools (or later)
 * [xmake](https://xmake.io)
 * then run `xmake`
+
+#### Windows artifacts also available [here](https://github.com/eepycats/steam2-extract/actions)
