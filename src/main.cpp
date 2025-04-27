@@ -102,13 +102,13 @@ void cc_extract(argparse::ArgumentParser& args) {
 		std::filesystem::path final_dir = final;
 		final_dir.remove_filename();
 		std::filesystem::create_directories(final_dir);
-		static_cast<void>(tp.submit_task([&, final, re]() {
+		tp.detach_task([&, final, re]() {
 			pretty_print("[thread {}]\textracting file: {}", std::this_thread::get_id(), final.string());
 			std::ofstream out(final, std::ios::binary);
 			storage.extract_file(out, index, entry.fileid);
 			out.close();
 
-			}));
+			});
 	}
 	tp.wait();
 	auto end = std::chrono::system_clock::now();
@@ -157,7 +157,7 @@ void cc_validate(argparse::ArgumentParser& args) {
 			continue;
 		}
 
-		static_cast<void>(tp.submit_task([&, j, chksum]() {
+		tp.detach_task([&, j, chksum]() {
 			uint32_t first = chksum.firstidx;
 			uint32_t count = chksum.count;
 			//read file
@@ -180,7 +180,7 @@ void cc_validate(argparse::ArgumentParser& args) {
 				left -= to_read;
 			}
 
-			}));
+			});
 
 
 		j++;
