@@ -148,7 +148,7 @@ void cc_validate(argparse::ArgumentParser& args) {
 	int j = 0;
 	bool onlybad = args["--onlybad"] == true;
 	BS::thread_pool tp;
-	std::println(std::cout, "Validating cache {}", args.get("storage"));
+	std::println("Validating cache {}", args.get("storage"));
 	auto start = std::chrono::system_clock::now();
 	for (const auto& chksum : c.m_map) {
 		//std::println(std::cout, "hi");
@@ -185,11 +185,11 @@ void cc_validate(argparse::ArgumentParser& args) {
 
 		j++;
 	}
-	std::println(std::cout, "Tasks submitted, waiting!");
+	std::println("Tasks submitted, waiting!");
 	tp.wait();
 	auto end = std::chrono::system_clock::now();
 	std::chrono::duration<double> elapsed_seconds = end - start;
-	std::println(std::cout, "took {}", elapsed_seconds);
+	std::println("took {}", elapsed_seconds);
 }
 
 void cc_iton(argparse::ArgumentParser& args) {
@@ -213,10 +213,10 @@ void cc_lsblk(argparse::ArgumentParser& args) {
 	bool onlyid = args["--onlyid"] == true;
 	for (const auto& pairs : i.m_indexes) {
 		if (onlyid) {
-			std::println(std::cout, "{}", pairs.first);
+			std::println("{}", pairs.first);
 		}
 		else {
-			std::println(std::cout, "{} | {}", pairs.first, Index::filetype_to_string(pairs.second.m_type));
+			std::println("{} | {}", pairs.first, Index::filetype_to_string(pairs.second.m_type));
 		}
 	}
 }
