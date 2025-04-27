@@ -53,7 +53,7 @@ void pretty_print(const std::format_string<Args...> fmt, Args&&... args)
 	static std::hash<std::thread::id> hasher;
 	
 	color current_color = pallete[hasher(std::this_thread::get_id()) % 8];
-	std::print(std::cout, "\033[38;2;{};{};{}\m", current_color.r, current_color.g, current_color.b);
+	std::print(std::cout, "\033[38;2;{};{};{}m", current_color.r, current_color.g, current_color.b);
 	i++;
 	std::println(std::cout, fmt, std::forward<decltype(args)>(args)...);
 }
@@ -102,13 +102,13 @@ void cc_extract(argparse::ArgumentParser& args) {
 		std::filesystem::path final_dir = final;
 		final_dir.remove_filename();
 		std::filesystem::create_directories(final_dir);
-		tp.submit_task([&, final, re]() {
+		static_cast<void>(tp.submit_task([&, final, re]() {
 			pretty_print("[thread {}]\textracting file: {}", std::this_thread::get_id(), final.string());
 			std::ofstream out(final, std::ios::binary);
 			storage.extract_file(out, index, entry.fileid);
 			out.close();
 
-			});
+			}));
 	}
 	tp.wait();
 	auto end = std::chrono::system_clock::now();
@@ -157,7 +157,7 @@ void cc_validate(argparse::ArgumentParser& args) {
 			continue;
 		}
 
-		tp.submit_task([&, j, chksum]() {
+		static_cast<void>(tp.submit_task([&, j, chksum]() {
 			uint32_t first = chksum.firstidx;
 			uint32_t count = chksum.count;
 			//read file
@@ -180,7 +180,7 @@ void cc_validate(argparse::ArgumentParser& args) {
 				left -= to_read;
 			}
 
-			});
+			}));
 
 
 		j++;

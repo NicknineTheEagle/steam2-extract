@@ -91,7 +91,7 @@ std::filesystem::path Manifest::full_path_for_entry(const DirectoryEntry& entry)
 	m_file.seekg(tell, std::ios::beg);
 	return path;*/
 
-	auto find = [=](const DirectoryEntry& a){
+	auto find = [this](const DirectoryEntry& a){
 		uint32_t i = 0;
 		for (auto const& cur : m_direntries) {
 			if (a.nameoffset == cur.nameoffset && a.parentindex == cur.parentindex) {
