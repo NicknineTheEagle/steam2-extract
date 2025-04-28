@@ -1,19 +1,23 @@
-#include "steam2.hpp"
 #include <cryptopp/aes.h>
-#include <cryptopp/hex.h>
 #include <cryptopp/filters.h>
-#include "cryptopp/modes.h"
-#include <zlib.h>
-#include "vdf_parser.hpp"
-#include "json.hpp"
+#include <cryptopp/hex.h>
+#include <cryptopp/modes.h>
 #include <fstream>
 #include <iostream>
 #include <print>
+#include <zlib.h>
+
+#include "json.hpp"
+#include "steam2.hpp"
+#include "vdf_parser.hpp"
+
 using namespace steam2;
 
 Manifest::Manifest(std::string file_path) {
 	std::ifstream m_file = std::ifstream(file_path, std::ios_base::binary);
-	if (!m_file.good()) throw std::runtime_error("Invalid manifest path!");
+	if (!m_file.good())
+		throw std::runtime_error("Invalid manifest path!");
+
 	parse_stream(m_file);
 	// read header
 	/*file.read(reinterpret_cast<char*>(&m_header), sizeof(m_header));
@@ -117,6 +121,7 @@ std::filesystem::path Manifest::full_path_for_entry(const DirectoryEntry& entry)
 	}
 	return path;
 }
+
 // rewrite
 void Index::load_v3(uintmax_t size) {
 
@@ -126,11 +131,15 @@ void Index::load_v3(uintmax_t size) {
 			uint64_t length;
 			uint64_t mode;
 		} p;
+
 		m_file.read(reinterpret_cast<char*>(&p), sizeof(Part));
 		p.fileid = std::byteswap<uint64_t>(p.fileid);
 		p.length = std::byteswap<uint64_t>(p.length);
 		p.mode = std::byteswap<uint64_t>(p.mode);
-		if (p.mode > 3 || p.length > size) throw std::runtime_error("bad index");
+
+		if (p.mode > 3 || p.length > size)
+			throw std::runtime_error("bad index");
+
 		m_indexes[p.fileid] = {};
 
 		if (p.length) {
@@ -161,11 +170,15 @@ void Index::load_v2(uintmax_t size) {
 			uint32_t length;
 			uint32_t mode;
 		} p;
+
 		m_file.read(reinterpret_cast<char*>(&p), sizeof(Part));
 		p.fileid = std::byteswap<uint32_t>(p.fileid);
 		p.length = std::byteswap<uint32_t>(p.length);
 		p.mode = std::byteswap<uint32_t>(p.mode);
-		if (p.mode > 3 || p.length > size) throw std::runtime_error("bad index");
+
+		if (p.mode > 3 || p.length > size)
+			throw std::runtime_error("bad index");
+
 		m_indexes[p.fileid] = {};
 
 		if (p.length) {
@@ -190,8 +203,11 @@ void Index::load_v2(uintmax_t size) {
 
 Index::Index(std::string file_path, version ver) {
 	m_file = std::ifstream(file_path, std::ios_base::binary);
-	if (!m_file.good()) throw std::runtime_error("Invalid index path!");
+	if (!m_file.good())
+		throw std::runtime_error("Invalid index path!");
+
 	auto size = std::filesystem::file_size(file_path);
+
 	switch (ver) {
 	case version::v2:
 		load_v2(size);
@@ -208,12 +224,12 @@ Index::~Index() {
 
 Storage::Storage(std::string file_path, std::string hex_key) {
 	m_file = std::ifstream(file_path, std::ios_base::binary);
-	if (!m_file.good()) throw std::runtime_error("Invalid storage path");
+	if (!m_file.good())
+		throw std::runtime_error("Invalid storage path");
 
 	if (hex_key == "00000000000000000000000000000000") {
 		m_encrypted = false;
-	}
-	else {
+	} else {
 		CryptoPP::HexDecoder decoder;
 		decoder.Put(reinterpret_cast<CryptoPP::byte*>(hex_key.data()), hex_key.size());
 		decoder.MessageEnd();
@@ -222,7 +238,7 @@ Storage::Storage(std::string file_path, std::string hex_key) {
 	}
 }
 
-void Storage::extract_file(std::ostream & out, Index & index, uint32_t fileid) {
+void Storage::extract_file(std::ostream& out, Index& index, uint32_t fileid) {
 	thread_local static char decryptbuf[0x8000];
 
 	for (const auto& pair : index.m_indexes[fileid].m_chunks) {
@@ -343,18 +359,22 @@ void Storage::handle_chunk(std::ostream& out, Index::filetype type, std::istream
 			std::vector<char> data;
 			data.resize(len);
 			input.read(data.data(), len);
+
 			if (!keyset) {
 				throw std::runtime_error("depot encrypted, no key provided! aborting!");
 			}
+
 			struct encparams_t {
 				uint32_t encsize;
 				uint32_t decsize;
 			};
+
 			encparams_t params = *reinterpret_cast<encparams_t*>(data.data());
 			if ((len -0x8) % 0x10 != 0) {
 				size_t to_insert = 0x10 - ((data.size() - 0x8) % 0x10);
 				data.resize(data.size() + to_insert, '\0');
 			}
+
 			// decrypt
 			CryptoPP::CFB_Mode< CryptoPP::AES >::Decryption d;
 			d.SetKeyWithIV(key_, sizeof(key_), iv, sizeof(iv));
@@ -377,9 +397,11 @@ void Storage::handle_chunk(std::ostream& out, Index::filetype type, std::istream
 			std::vector<char> data;
 			data.resize(len);
 			input.read(data.data(), len);
+
 			if (!keyset) {
 				throw std::runtime_error("depot encrypted, no key provided! aborting!");
 			}
+
 			if (data.size() % 10 != 0) {
 				data.resize(data.size() + (0x10 - (data.size() % 10)), '\0');
 			}
@@ -400,7 +422,8 @@ void Storage::handle_chunk(std::ostream& out, Index::filetype type, std::istream
 
 Checksum::Checksum(std::string file) {
 	std::ifstream f(file, std::ios_base::binary);
-	if (!f.good()) throw std::runtime_error("Invalid checksum path");
+	if (!f.good())
+		throw std::runtime_error("Invalid checksum path");
 
 	f.read(reinterpret_cast<char*>(&m_header), sizeof(hdr_t));
 	m_map.resize(m_header.items);
@@ -418,7 +441,7 @@ Checksum::Checksum(std::istream& f) {
 	f.read(reinterpret_cast<char*>(m_entries.data()), sizeof(entry_t) * m_header.checksums);
 }
 
-int Checksum::num_checksums(std::uint32_t fileid) {
+int Checksum::num_checksums(uint32_t fileid) {
 	return m_map[fileid].count;
 }
 
@@ -454,8 +477,7 @@ void util::KeyStore::PopulateFromJSON() {
 	nlohmann::json j;
 	f >> j;
 	auto& keys = j["keys"];
-	for (auto it = keys.begin(); it != keys.end(); ++it)
-	{
+	for (auto it = keys.begin(); it != keys.end(); ++it) {
 		m_keys[std::stoi(it.key())] = it.value();
 	}
 }
@@ -463,8 +485,7 @@ void util::KeyStore::PopulateFromJSON() {
 util::KeyStore::KeyStore() {
 	if (std::filesystem::exists("legacydepotdata.vdf")) {
 		PopulateFromVDF();
-	}
-	else if (std::filesystem::exists("depotkeys.json")) {
+	} else if (std::filesystem::exists("depotkeys.json")) {
 		PopulateFromJSON();
 	}
 }
@@ -485,12 +506,15 @@ std::string net::FileClient::recv_message(size_t len) {
 	} msg;
 	
 	asio::read(s, asio::buffer(&msg, sizeof(msg)));
+
 	if (m_storageid != std::byteswap(msg.storageid)) {
 		throw std::runtime_error("bad storageid");
 	}
+
 	if (m_msgid != std::byteswap(msg.mesasgeid)) {
 		throw std::runtime_error("bad storageid");
 	}
+
 	std::string str;
 	str.resize(len);
 	asio::read(s, asio::buffer(str.data(), str.length()));
@@ -499,7 +523,9 @@ std::string net::FileClient::recv_message(size_t len) {
 
 
 std::string net::FileClient::send_command(int cmd, char* extra, size_t len) {
-	if (cmd == 9 or cmd == 10) m_storageid = 1;
+	if (cmd == 9 or cmd == 10)
+		m_storageid = 1;
+
 #pragma pack(push, 1)
 	struct cmd_t {
 		uint32_t len;
@@ -508,6 +534,7 @@ std::string net::FileClient::send_command(int cmd, char* extra, size_t len) {
 		uint32_t msgid;
 	} cmdctx;
 #pragma pack(pop)
+
 	unsigned size = static_cast<unsigned>(sizeof(cmd_t)) - 4 + static_cast<unsigned>(len);
 	cmdctx.len = std::byteswap(size);
 	cmdctx.cmdid = static_cast<uint8_t>(cmd);
@@ -533,11 +560,13 @@ void net::FileClient::open_storage() {
 	} av;
 	av.a = std::byteswap(m_appid);
 	av.v = std::byteswap(m_version);
+
 	auto str = send_command(9, reinterpret_cast<char*>(&av), sizeof(av));
 	if (str.length() == 1 and *str.c_str() != '\0'){
 		m_connected = false;
 		throw std::runtime_error("cs refused");
 	}
+
 	struct sc_t {
 		uint32_t s;
 		uint32_t c;
@@ -610,13 +639,16 @@ net::FileClient::FileClient(net::addr addr, unsigned appid, unsigned version) : 
 			retry_count++;
 		}
 	}
-	if (!m_connected) throw std::runtime_error("cant connect");
+
+	if (!m_connected) {
+		throw std::runtime_error("cant connect");
+	}
 }
 
 std::string net::FileClient::get_metadata(int cmd) {
 	send_command(cmd);
 	std::uint32_t size;
-	asio::read(s, asio::buffer(&size, sizeof(std::uint32_t)));
+	asio::read(s, asio::buffer(&size, sizeof(uint32_t)));
 	size = std::byteswap(size);
 
 	std::string ret = recv_part_data(size);
@@ -677,22 +709,25 @@ Index::filetype net::FileClient::get_chunks(int fileid, int filestart, int numch
 		uint32_t filestart;
 		uint32_t numchunks;
 		uint8_t pad = 0;
-	}fd;
+	} fd;
 #pragma pack(pop)
 	fd.fileid = std::byteswap(fileid);
 	fd.filestart = std::byteswap(filestart);
 	fd.numchunks = std::byteswap(numchunks);
 	send_command(7, reinterpret_cast<char*>(&fd), sizeof(fd));
+
 	struct rc_t {
 		uint32_t replychunks;
 		uint32_t filemode;
 	} rc;
+
 	asio::read(s, asio::buffer(&rc, sizeof(rc)));
 	Index::filetype ret = static_cast<Index::filetype>(std::byteswap(rc.filemode));
 	
 	for (unsigned i = 0; i < std::byteswap(rc.replychunks); i++) {
 		chunks.push_back(receive_data_withlen());
 	}
+
 	m_msgid++;
 	return ret;
 }

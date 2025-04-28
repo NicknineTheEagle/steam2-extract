@@ -2,3 +2,4 @@ dist/extract
 dist/extract.exe
 .xmake/
 build/
+compile_commands.json

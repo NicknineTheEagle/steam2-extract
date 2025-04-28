@@ -1,39 +1,43 @@
-#include <iostream>
-#include <fstream>
-#include "argparse.hpp"
-#include <chrono>
-#include <regex>
-#include "steam2.hpp"
-#include "BS_thread_pool.hpp"
-#include "win32console.hpp"
 #include <atomic>
+#include <chrono>
+#include <fstream>
+#include <iostream>
 #include <print>
+#include <regex>
+
+#include "argparse.hpp"
+#include "BS_thread_pool.hpp"
+#include "steam2.hpp"
+#include "win32console.hpp"
+
 using namespace steam2;
 
 util::KeyStore g_keystore;
 
-std::vector<std::string_view> split(std::string_view str, char delim)
-{
+std::vector<std::string_view> split(std::string_view str, char delim) {
 	std::vector<std::string_view> result;
 	auto left = str.begin();
-	for (auto it = left; it != str.end(); ++it)
-	{
-		if (*it == delim)
-		{
+
+	for (auto it = left; it != str.end(); ++it) {
+		if (*it == delim) {
 			result.emplace_back(&*left, it - left);
 			left = it + 1;
 		}
 	}
+
 	if (left != str.end())
 		result.emplace_back(&*left, str.end() - left);
+
 	return result;
 }
+
 struct color {
-	std::uint8_t r;
-	std::uint8_t g;
-	std::uint8_t b;
+	uint8_t r;
+	uint8_t g;
+	uint8_t b;
 };
-const std::vector<color> pallete = {
+
+color pallete[] = {
 	{255, 173, 173},
 	{255, 214, 165},
 	{253, 255, 182},
@@ -44,11 +48,9 @@ const std::vector<color> pallete = {
 	{255, 198, 255}
 };
 
-
 // rainbow :3
 template<typename... Args>
-void pretty_print(const std::format_string<Args...> fmt, Args&&... args)
-{
+void pretty_print(const std::format_string<Args...> fmt, Args&&... args) {
 	static std::atomic<int> i = 0;
 	static std::hash<std::thread::id> hasher;
 	
@@ -59,9 +61,9 @@ void pretty_print(const std::format_string<Args...> fmt, Args&&... args)
 }
 
 void cc_extract(argparse::ArgumentParser& args) {
-	w32::enable_truecolor();
 	Manifest manifest(args.get("manifest"));
 	steam2::Index::version v;
+
 	if (args["--v2"] == true) {
 		v = steam2::Index::version::v2;
 	}
@@ -75,51 +77,58 @@ void cc_extract(argparse::ArgumentParser& args) {
 	std::filesystem::path base;
 	std::regex re;
 	bool filter = false;
+
 	try {
 		re = args.get("--filter");
 		filter = true;
-	}
-	catch (std::regex_error err) {
+	} catch (std::regex_error err) {
 		std::cerr << err.what() << std::endl;
 		return;
 	}
-	catch (const std::exception& err) {}
 
 	try {
 		base = args.get("--out");
-	}
-	catch (...) {		
+	} catch (...) {		
 		base = (std::filesystem::path(".") / std::format("{}_{}", manifest.m_header.cacheid, manifest.m_header.gcfversion));
 	}
+
 	BS::thread_pool tp;
 
 	auto start = std::chrono::system_clock::now();
+
 	for (const auto& entry : manifest.m_direntries) {
-		if (entry.dirtype == 0) continue;
+		if (entry.dirtype == 0)
+			continue;
+
 		std::filesystem::path path = manifest.full_path_for_entry(entry);
-		if (filter && !std::regex_match(path.string(), re)) continue;
+		if (filter && !std::regex_match(path.string(), re))
+			continue;
+
 		std::filesystem::path final = (base.make_preferred() / path.make_preferred());
 		std::filesystem::path final_dir = final;
 		final_dir.remove_filename();
 		std::filesystem::create_directories(final_dir);
+
 		tp.detach_task([&, final, re]() {
 			pretty_print("[thread {}]\textracting file: {}", std::this_thread::get_id(), final.string());
 			std::ofstream out(final, std::ios::binary);
 			storage.extract_file(out, index, entry.fileid);
 			out.close();
-
-			});
+		});
 	}
+
 	tp.wait();
+
 	auto end = std::chrono::system_clock::now();
 	std::chrono::duration<double> elapsed_seconds = end - start;
 	std::cout << "Took " << elapsed_seconds << "\n";
-	w32::disable_truecolor();
 }
 
 void cc_ls(argparse::ArgumentParser& args) {
 	Manifest manifest(args.get("manifest"));
+
 	std::cout << std::format("File list for cache {} version {}:", manifest.m_header.cacheid, manifest.m_header.gcfversion) << std::endl;
+
 	for (const auto& entry : manifest.m_direntries) {
 		std::filesystem::path name = manifest.full_path_for_entry(entry);
 		if (name.string() == "") {
@@ -130,15 +139,13 @@ void cc_ls(argparse::ArgumentParser& args) {
 	}
 }
 
-
-
 void cc_validate(argparse::ArgumentParser& args) {
 	std::string key;
 	std::string cacheid = args.get("--cacheid");
+
 	if (cacheid != "") {
 		key = g_keystore.get(std::stoi(cacheid));
-	}
-	else {
+	} else {
 		key = args.get("--key");
 	}
 
@@ -148,10 +155,11 @@ void cc_validate(argparse::ArgumentParser& args) {
 	int j = 0;
 	bool onlybad = args["--onlybad"] == true;
 	BS::thread_pool tp;
+
 	std::println("Validating cache {}", args.get("storage"));
 	auto start = std::chrono::system_clock::now();
+
 	for (const auto& chksum : c.m_map) {
-		//std::println(std::cout, "hi");
 		if (chksum.count == 0) {
 			j++;
 			continue;
@@ -172,21 +180,20 @@ void cc_validate(argparse::ArgumentParser& args) {
 				uint32_t sum = Checksum::hashblock(fb.str().data() + (k * 0x8000), to_read);
 
 				if (correct_sum != sum) {
-					std::println("Bad checksum for file {} got {} expected {}", j, sum, correct_sum);
-				}
-				else if (!onlybad) {
+					std::println("Bad checksum for file {}: got {} expected {}", j, sum, correct_sum);
+				} else if (!onlybad) {
 					std::println("File {} part {} OK", j, k);
 				}
 				left -= to_read;
 			}
-
-			});
-
+		});
 
 		j++;
 	}
+
 	std::println("Tasks submitted, waiting!");
 	tp.wait();
+
 	auto end = std::chrono::system_clock::now();
 	std::chrono::duration<double> elapsed_seconds = end - start;
 	std::println("took {}", elapsed_seconds);
@@ -202,24 +209,25 @@ void cc_iton(argparse::ArgumentParser& args) {
 
 void cc_lsblk(argparse::ArgumentParser& args) {
 	steam2::Index::version v;
-	if (args["--v2"] == true) {
-		v = steam2::Index::version::v2;
-	}
-	else {
-		v = steam2::Index::version::v3;
 
+	if (args["--v2"] == true) {
+		v = Index::version::v2;
+	} else {
+		v = Index::version::v3;
 	}
+
 	Index i(args.get("index"), v);
 	bool onlyid = args["--onlyid"] == true;
+
 	for (const auto& pairs : i.m_indexes) {
 		if (onlyid) {
 			std::println("{}", pairs.first);
-		}
-		else {
+		} else {
 			std::println("{} | {}", pairs.first, Index::filetype_to_string(pairs.second.m_type));
 		}
 	}
 }
+
 #ifdef STEAM2_BUILD_NET
 void cc_download(argparse::ArgumentParser& args) {
 	std::string clsstr = args.get("cls");
@@ -234,21 +242,16 @@ void cc_download(argparse::ArgumentParser& args) {
 	try {
 		re = args.get("--filter");
 		filter = true;
-	}
-	catch (std::regex_error& err) {
+	} catch (std::regex_error& err) {
 		std::cerr << err.what() << std::endl;
 		return;
 	}
-	catch (const std::exception& err) {}
-
 
 	try {
 		base = args.get("--outpath");
-	}
-	catch (...) {
+	} catch (...) {
 		base = std::filesystem::path(std::format(".\\{}_{}\\", depot, version));
 	}
-
 
 	steam2::net::addr addr;
 	auto splitstr = split(clsstr, ':');
@@ -256,6 +259,7 @@ void cc_download(argparse::ArgumentParser& args) {
 	int port = std::stoi(std::string(splitstr[1]));
 	addr.port = static_cast<uint16_t>(port);
 	steam2::net::addr cmaddr;
+
 	if (!skipcls) {
 		auto servers = steam2::net::get_fileservers(addr, depot, version, 2);
 		for (auto& s : servers) {
@@ -263,8 +267,7 @@ void cc_download(argparse::ArgumentParser& args) {
 		}
 		//net::FileClient fc(servers[1], depot, version);
 		cmaddr = servers[1];
-	}
-	else {
+	} else {
 		cmaddr = addr;
 	}
 
@@ -274,11 +277,16 @@ void cc_download(argparse::ArgumentParser& args) {
 	Checksum c = fc.download_checksums();
 
 	auto start = std::chrono::system_clock::now();
+
 	for (const auto& entry : m.m_direntries) {
-		if (entry.fileid == 0xFFFFFFFF) continue;
+		if (entry.fileid == 0xFFFFFFFF)
+			continue;
+
 		std::filesystem::path path = m.full_path_for_entry(entry);
 		std::filesystem::path final = (base.make_preferred() / path.make_preferred());
-		if (filter && !std::regex_match(path.string(), re)) continue;
+
+		if (filter && !std::regex_match(path.string(), re))
+			continue;
 
 		if (filter) {
 			std::filesystem::path p2 = final;
@@ -296,16 +304,18 @@ void cc_download(argparse::ArgumentParser& args) {
 		Index::filetype t;
 		auto thefile = fc.get_file(entry.fileid, c.num_checksums(entry.fileid), t);
 		std::cout << "Downloading: " << final << "\n";
+
 		for (auto const& chunk : thefile) {
 			std::istringstream ss(chunk, std::ios_base::binary);
 			Storage::handle_chunk(out, t, ss, chunk.length(), key);
 		}
+
 		out.close();
 	}
+
 	auto end = std::chrono::system_clock::now();
 	std::chrono::duration<double> elapsed_seconds = end - start;
 	std::cout << "Took " << elapsed_seconds << "\n";
-
 }
 
 void cc_lsr(argparse::ArgumentParser& args) {
@@ -314,22 +324,25 @@ void cc_lsr(argparse::ArgumentParser& args) {
 	unsigned version = args.get<int>("version");
 	steam2::net::addr addr;
 	auto splitstr = split(clsstr, ':');
+
 	addr.ip = asio::ip::address_v4::from_string(std::string(splitstr[0]));
 	int port = std::stoi(std::string(splitstr[1]));
 	addr.port = static_cast<uint16_t>(port);
+
 	auto servers = steam2::net::get_fileservers(addr, depot, version, 2);
 	for (auto& s : servers) {
 		std::cout << s.ip.to_string() << " " << s.port << "\n";
 	}
+
 	net::FileClient fc(servers[1], depot, version);
 	Manifest m = fc.download_manifest();
 	std::println("File list for cache {} version {}:", m.m_header.cacheid, m.m_header.gcfversion);
+
 	for (const auto& entry : m.m_direntries) {
 		std::filesystem::path name = m.full_path_for_entry(entry);
 		if (name.string() == "") {
 			continue;
 		}
-
 		std::cout << name.make_preferred().string() << "\n";
 	}
 }
@@ -345,13 +358,11 @@ void cc_dlcdr(argparse::ArgumentParser& args) {
 	net::download_cdr(addr, f);
 	f.close();
 }
-
-
 #endif
 
 int main(int argc, const char* argv[]) {
-
-	argparse::ArgumentParser program("stor");
+	w32::enable_truecolor();
+	argparse::ArgumentParser program(argv[0]);
 
 	using callback_fn = std::function<void(argparse::ArgumentParser&)>;
 	struct parse_node {
@@ -359,10 +370,11 @@ int main(int argc, const char* argv[]) {
 		argparse::ArgumentParser p;
 		callback_fn f;
 	};
+
 	std::list<parse_node> parsers;
 	auto parser = [&](std::string n, callback_fn cb) -> argparse::ArgumentParser& {
 		return (parsers.emplace_back(n, cb)).p;
-		};
+	};
 
 	// extract
 	auto& extract_command = parser("x", cc_extract);
@@ -401,7 +413,6 @@ int main(int argc, const char* argv[]) {
 	list_command.add_argument("manifest")
 		.help("the .manifest file")
 		.required();
-
 
 	// validate
 	auto& validate_command = parser("v", cc_validate);
@@ -512,7 +523,7 @@ int main(int argc, const char* argv[]) {
 		.required()
 		.scan<'i', int>();		
 #endif
-	for (auto & i : parsers) {
+	for (auto& i : parsers) {
 		program.add_subparser(i.p);
 	}
 
@@ -524,10 +535,13 @@ int main(int argc, const char* argv[]) {
 				break;
 			};
 		}
-	}
-	catch (const std::exception& err) {
+	} catch (const std::exception& err) {
 		std::cout << err.what() << std::endl;
 		std::cout << program;
-		std::exit(1);
+		w32::disable_truecolor();
+		return 1;
 	}
+
+	w32::disable_truecolor();
+	return 0;
 }

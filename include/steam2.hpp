@@ -1,31 +1,34 @@
 #pragma once
-
-#include <istream>
-#include <fstream>
-#include <filesystem>
-#include <map>
-#include <vector>
-#include <array>
 #include <cryptopp/aes.h>
+#include <filesystem>
+#include <fstream>
+#include <istream>
+#include <map>
+#include <mutex>
 #include <string>
+#include <vector>
+
 #ifdef STEAM2_BUILD_NET
 #include <asio.hpp>
 #endif
-#include <mutex>
 
 namespace steam2 {
 	namespace util {
 		class KeyStore {
 		public:
+			KeyStore();
+
 			void PopulateFromJSON();
 			void PopulateFromVDF();
-			KeyStore();
+
 			inline bool has_key(uint32_t depot) {
 				return m_keys.contains(depot);
 			}
+
 			inline std::string get(uint32_t depot) {
 				return m_keys[depot];
 			}
+
 			std::map<uint32_t, std::string> m_keys;
 		};
 	}
@@ -45,12 +48,16 @@ namespace steam2 {
 	public:
 		Manifest(std::string file_path);
 		Manifest(std::istream& read);
-		void parse_stream(std::istream& read);
 		~Manifest();
+
+		void parse_stream(std::istream& read);
+
 		std::filesystem::path full_path_for_entry(const DirectoryEntry& entry);
+
 		inline std::filesystem::path full_path_for_entry(int index) {
 			return full_path_for_entry(m_direntries[index]);
 		}
+
 		struct Header {
 			uint32_t dummy1;
 			uint32_t cacheid;
@@ -67,6 +74,7 @@ namespace steam2 {
 			uint32_t dummy4;
 			uint32_t checksum;
 		} m_header{};
+
 		std::string strtable;
 		std::vector<DirectoryEntry> m_direntries;
 		std::map<uint32_t, std::string> m_stringtable;
@@ -82,8 +90,10 @@ namespace steam2 {
 			v2,
 			v3
 		};
+
 		Index(std::string file_path, version ver = version::v3);
 		~Index();
+
 		enum filetype {
 			raw = 0,
 			compressed,
@@ -116,7 +126,6 @@ namespace steam2 {
 
 	class Storage {
 	public:
-
 		Storage(std::string file_path, std::string hex_key);
 		static void handle_chunk(std::ostream& out, Index::filetype type, std::istream& input, size_t len, std::string key);
 		void extract_file(std::ostream& out, steam2::Index& index, uint32_t fileid);
@@ -136,12 +145,14 @@ namespace steam2 {
 		Checksum(std::string file);
 		Checksum(std::istream& s);
 		int num_checksums(std::uint32_t fileid);
+
 		struct hdr_t {
 			uint32_t dummy1;
 			uint32_t dummy2;
 			uint32_t items;
 			uint32_t checksums;
 		} m_header;
+
 		struct mapnode_t {
 			uint32_t count;
 			uint32_t firstidx;
@@ -167,6 +178,9 @@ namespace steam2 {
 				char* buf;
 				size_t size;
 			};
+
+			FileClient(net::addr addr, unsigned appid, unsigned version);
+
 			Index::filetype get_chunks(int fileid, int filestart, int numchunks, std::vector<std::string>& chunks);
 			std::vector<std::string> get_file(unsigned fileid, int totalchunks, Index::filetype& mode);
 			std::string get_metadata(int cmd);
@@ -180,7 +194,6 @@ namespace steam2 {
 			std::string recv_part_data(size_t len);
 			std::string recv_message(size_t len);
 			std::string send_command(int cmd, char* extra = nullptr, size_t len = 0);
-			FileClient(net::addr addr, unsigned appid, unsigned version);
 		private:
 			bool m_connected = false;
 			unsigned m_storageid = 0;
@@ -192,7 +205,6 @@ namespace steam2 {
 			asio::io_context io_context;
 			asio::ip::tcp::socket s;
 		};
-
 
 #pragma pack(push, 1)
 
