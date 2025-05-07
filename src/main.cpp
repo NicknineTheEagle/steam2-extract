@@ -60,6 +60,12 @@ void pretty_print(const std::format_string<Args...> fmt, Args&&... args) {
 	std::println(std::cout, fmt, std::forward<decltype(args)>(args)...);
 }
 
+std::filesystem::path sanitize_path(std::filesystem::path& original) {
+	std::string sanitized = original.string();
+    sanitized.erase(std::remove(sanitized.begin(), sanitized.end(), ':'), sanitized.end());
+    return std::filesystem::path(sanitized);
+}
+
 void cc_extract(argparse::ArgumentParser& args) {
 	Manifest manifest(args.get("manifest"));
 	steam2::Index::version v;
@@ -84,6 +90,8 @@ void cc_extract(argparse::ArgumentParser& args) {
 	} catch (std::regex_error err) {
 		std::cerr << err.what() << std::endl;
 		return;
+	} catch (std::exception& ex){
+		filter = false; // we need this to make filter optional
 	}
 
 	try {
@@ -107,7 +115,7 @@ void cc_extract(argparse::ArgumentParser& args) {
 		std::filesystem::path final = (base.make_preferred() / path.make_preferred());
 		std::filesystem::path final_dir = final;
 		final_dir.remove_filename();
-		std::filesystem::create_directories(final_dir);
+		std::filesystem::create_directories(sanitize_path(final_dir));
 
 		tp.detach_task([&, final, re]() {
 			pretty_print("[thread {}]\textracting file: {}", std::this_thread::get_id(), final.string());
