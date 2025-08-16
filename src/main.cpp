@@ -510,7 +510,7 @@ void cc_makegcf(argparse::ArgumentParser& args){
 		std::size_t current_size = current.size();
 		if (current_size == 0){
 			oss.write(std::string(0x2000, '\0').data(), 0x2000);
-
+			return;
 		}
 		std::size_t padded_size = ((current_size + block_size - 1) / block_size) * block_size;
 
