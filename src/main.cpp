@@ -444,7 +444,7 @@ void cc_makegcf(argparse::ArgumentParser& args){
 	}
 
 	write.set_endian(endian_type::little);
-	write.write_struct(gcf::bat_block{total_blocks,0,gcf::bat_block::size_t::e16bit,0}.calculate_checksum());
+	write.write_struct(gcf::bat_block{total_blocks,0,gcf::bat_block::size_t::e32bit,0}.calculate_checksum());
 
 	uint32_t frag_idx = 0;
 	uint32_t prev_count = 0;
@@ -456,7 +456,7 @@ void cc_makegcf(argparse::ArgumentParser& args){
 			write.write_int(frag_idx+1);
 			frag_idx++;
 		}
-		write.write_int(uint32_t{0xffff});
+		write.write_int(uint32_t{0xffffffff});
 		frag_idx++;
 	}
 	
