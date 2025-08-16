@@ -1,5 +1,5 @@
-dist/extract
-dist/extract.exe
+dist/*
+!dist/legacydepotdata.vdf
 .xmake/
 build/
 compile_commands.json

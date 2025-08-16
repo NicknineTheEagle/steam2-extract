@@ -5,10 +5,9 @@
 #include <fstream>
 #include <iostream>
 #include <print>
-#include <zlib.h>
-
-#include "json.hpp"
+#include <zlib-ng.h>
 #include "steam2.hpp"
+#include "json.hpp"
 #include "vdf_parser.hpp"
 
 using namespace steam2;
@@ -54,7 +53,7 @@ void Manifest::parse_stream(std::istream &s) {
 		std::string current;
 		std::getline(s, current, '\0');
 		m_stringtable[i] = current;
-		i++;
+		i++;	
 	}
 }
 
@@ -257,8 +256,8 @@ void Storage::extract_file(std::ostream& out, Index& index, uint32_t fileid) {
 			break;
 		case Index::filetype::compressed: {
 			//char* dbuf = new char[32768];
-			uLongf dstlen = 32768;
-			int res = uncompress(reinterpret_cast<unsigned char*>(decryptbuf), &dstlen, reinterpret_cast<Bytef*>(chunk.data()), static_cast<uLong>(chunk.size()));
+			size_t dstlen = 32768;
+			int res = zng_uncompress(reinterpret_cast<uint8_t *>(decryptbuf), &dstlen, reinterpret_cast<uint8_t *>(chunk.data()), static_cast<size_t>(chunk.size()));
 			if (res) {
 				throw std::runtime_error("Failed! (compressed)");
 			}
@@ -289,8 +288,8 @@ void Storage::extract_file(std::ostream& out, Index& index, uint32_t fileid) {
 			// decompress
 			//std::println(std::cout, "size {}", params.decsize);
 			//Bytef* uncbuf = new Bytef[params.decsize];
-			uLongf dstlen = params.decsize;
-			int res = uncompress(reinterpret_cast<Bytef*>(decryptbuf), &dstlen, reinterpret_cast<Bytef*>(decbuf.data()), static_cast<uLong>(decbuf.size()));
+			size_t dstlen = params.decsize;
+			int res = zng_uncompress(reinterpret_cast<uint8_t*>(decryptbuf), &dstlen, reinterpret_cast<uint8_t*>(decbuf.data()), static_cast<size_t>(decbuf.size()));
 			if (res) {
 				throw std::runtime_error("Failed! (crypted and compressed)");
 			}
@@ -320,7 +319,6 @@ void Storage::extract_file(std::ostream& out, Index& index, uint32_t fileid) {
 	}
 }
 
-
 void Storage::handle_chunk(std::ostream& out, Index::filetype type, std::istream& input, size_t len, std::string key) {
 	bool keyset = false;
 	CryptoPP::byte key_[16];
@@ -342,11 +340,11 @@ void Storage::handle_chunk(std::ostream& out, Index::filetype type, std::istream
 			break;
 		case Index::filetype::compressed: {
 			char* dbuf = new char[32768];
-			uLongf dstlen = 32768;
+			size_t dstlen = 32768;
 			char* tmpbf = new char[len];
 
 			input.read(tmpbf, len);
-			int res = uncompress((Bytef*)dbuf, &dstlen, reinterpret_cast<Bytef*>(tmpbf), static_cast<uLong>(len));
+			int res = zng_uncompress((uint8_t*)dbuf, &dstlen, reinterpret_cast<uint8_t*>(tmpbf), static_cast<size_t>(len));
 			if (res) {
 				throw std::runtime_error("Failed! (compressed)");
 			}
@@ -383,9 +381,9 @@ void Storage::handle_chunk(std::ostream& out, Index::filetype type, std::istream
 			CryptoPP::StringSource source(reinterpret_cast<CryptoPP::byte*>(data.data() + 0x8), data.size() - 0x8, true, new CryptoPP::StreamTransformationFilter(d, new CryptoPP::VectorSink(decbuf)));
 
 			// decompress
-			Bytef* uncbuf = new Bytef[params.decsize];
-			uLongf dstlen = params.decsize;
-			int res = uncompress(uncbuf, &dstlen, reinterpret_cast<Bytef*>(decbuf.data()), static_cast<uLong>(decbuf.size()));
+			uint8_t* uncbuf = new uint8_t[params.decsize];
+			size_t dstlen = params.decsize;
+			int res = zng_uncompress(uncbuf, &dstlen, reinterpret_cast<uint8_t*>(decbuf.data()), static_cast<size_t>(decbuf.size()));
 			if (res) {
 				throw std::runtime_error("Failed! (crypted and compressed)");
 			}
@@ -447,7 +445,7 @@ int Checksum::num_checksums(uint32_t fileid) {
 
 
 uint32_t Checksum::hashblock(char* block, size_t size) {
-	return crc32(0, reinterpret_cast<Bytef*>(block), static_cast<uInt>(size)) ^ adler32(0, reinterpret_cast<Bytef*>(block), static_cast<uInt>(size));
+	return zng_crc32(0, reinterpret_cast<uint8_t*>(block), size) ^ zng_adler32(0, reinterpret_cast<uint8_t*>(block), size);
 }
 
 std::string Index::filetype_to_string(Index::filetype f) {

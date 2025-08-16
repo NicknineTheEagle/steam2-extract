@@ -9,6 +9,27 @@
 #include "BS_thread_pool.hpp"
 #include "steam2.hpp"
 #include "win32console.hpp"
+#include "gcfstructs.hpp"
+#include "enumerate.hpp"
+#include "filewriter.hpp"
+#include "counting_ostream.hpp"
+std::vector<char> read_file_to_memory(const std::string& file_name) {
+    std::ifstream file(file_name, std::ios::binary | std::ios::ate);
+
+    if (!file) {
+        throw std::runtime_error("failed to open file: " + file_name);
+    }
+
+    std::streamsize file_size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    std::vector<char> buffer(file_size);
+    if (!file.read(buffer.data(), file_size)) {
+        throw std::runtime_error("failed to read file: " + file_name);
+    }
+
+    return buffer;
+}
 
 using namespace steam2;
 
@@ -368,6 +389,155 @@ void cc_dlcdr(argparse::ArgumentParser& args) {
 }
 #endif
 
+void cc_makegcf(argparse::ArgumentParser& args){
+	Manifest manifest(args.get("manifest"));
+
+	Index index(args.get("index"), steam2::Index::version::v3);
+	std::string key = g_keystore.has_key(manifest.m_header.cacheid) ? g_keystore.get(manifest.m_header.cacheid) : args.get("--key");
+	Storage storage(args.get("storage"), key);
+	std::map<uint32_t,uint32_t> blocks_per_file;
+	std::map<uint32_t,uint32_t> file_sizes;
+	uint32_t total_blocks = 0;
+
+	for (const auto& [i, entry] : enumerate(manifest.m_direntries)) {
+		if (entry.dirtype == 0)
+			continue;
+		counting_ostream str;
+		storage.extract_file(str, index, entry.fileid);
+		auto chunk_count = static_cast<uint32_t>(std::ceil(static_cast<float>(str.byte_count()) / static_cast<float>(0x2000)));
+		if (chunk_count == 0){
+			chunk_count ++;
+			std::println("file {} has no chunks? {}", entry.fileid, entry.dirtype);
+			
+		}
+		blocks_per_file[i] = chunk_count;
+		total_blocks += chunk_count;
+		file_sizes[i] = str.byte_count();
+	}
+
+	file_writer write(args.get("--out"));
+	write.write_struct(gcf::cache_descriptor{gcf::descriptor_version::current_version,gcf::cache_type::one_file_fixed_block,6,manifest.m_header.cacheid,manifest.m_header.gcfversion,gcf::cache_state::clean,0,0,0x2000,total_blocks}.compute_checksum());
+	write.write_struct(gcf::file_fixed_diectory_header{total_blocks,static_cast<uint32_t>(file_sizes.size()),static_cast<uint32_t>(file_sizes.size())-1,{0, 0, 0, 0},0}.compute_checksum());
+	
+	uint32_t current_block = 0;
+	uint32_t written_blocks = 0;
+	gcf::file_fixed_directory_entry empty_block_entry{gcf::block_flags::decrypted_probably,0,0,0,0,total_blocks,total_blocks,0xFFFFFFFF};
+	for (const auto& [i, entry] : enumerate(manifest.m_direntries)) {
+		if (entry.dirtype == 0 or not blocks_per_file.contains(i) or not blocks_per_file[i]){
+		//	write.write_struct(&empty_block_entry);
+		//	written_blocks++;
+			continue;
+		}
+		auto filemode = gcf::block_flags::loose;
+		auto& filetype = index.m_indexes[entry.fileid].m_type;
+		if (filetype == Index::filetype::compressed_and_crypted or filetype == Index::filetype::crypted){
+			filemode = gcf::block_flags::decrypted_probably;
+		}
+		write.write_struct(gcf::file_fixed_directory_entry{ (gcf::block_flags::used_block | filemode) ,0,0,file_sizes[i],current_block,total_blocks,total_blocks, static_cast<uint32_t>(i)}.ptr());
+		written_blocks++;
+		current_block += blocks_per_file[i];
+	}	
+
+	while (written_blocks != total_blocks){
+		write.write_struct(empty_block_entry.ptr());
+		written_blocks++;
+	}
+
+	write.set_endian(endian_type::little);
+	write.write_struct(gcf::bat_block{total_blocks,0,gcf::bat_block::size_t::e16bit,0}.calculate_checksum());
+
+	uint32_t frag_idx = 0;
+	uint32_t prev_count = 0;
+	for (auto& [idx, numchunks] : blocks_per_file){
+		if (not numchunks){
+			continue;
+		}
+		for (int i = 0; i < numchunks-1; i++){
+			write.write_int(frag_idx+1);
+			frag_idx++;
+		}
+		write.write_int(uint32_t{0xffff});
+		frag_idx++;
+	}
+	
+	if (frag_idx != total_blocks){
+		throw std::exception(std::format("undersized fragmentation data: {} {}", frag_idx, total_blocks).c_str());
+	}
+
+	//
+	// manifest
+	//
+
+	auto manifest_data = read_file_to_memory(args.get("manifest"));
+	write.write_data(manifest_data.data(), manifest_data.size());
+	write.write_struct(gcf::file_fixed_fs_tree_header{1,0}.ptr());
+
+	// write cache search keys (steam handles this by dumping a memory array to the file)
+	/*
+	  	exc_obj_in = (void *)(4 * Grid::CManifestBin::GetNumOfNodes(this));
+  		if ( exc_obj_in != (void *)fwrite(this->m_puCacheSearchKeys, 1u, (size_t)exc_obj_in, pFile) )
+	*/
+	uint32_t fuck = 0;
+	for (const auto& [i, entry] : enumerate(manifest.m_direntries)) {
+		if (entry.dirtype == 0 or not blocks_per_file.contains(i) or not blocks_per_file[i]) {
+			write.write_int(uint32_t{total_blocks});
+		} else{
+			write.write_int(uint32_t{static_cast<uint32_t>(fuck)});
+			fuck++;
+		}
+	}
+
+	//
+	// checksums
+	//
+
+	write.write_struct(gcf::file_fixed_checksum_header{1,	static_cast<uint32_t>(std::filesystem::file_size(args.get("checksum")))}.ptr());
+	auto checksum_data = read_file_to_memory(args.get("checksum"));
+	write.write_data(checksum_data.data(), checksum_data.size());
+	auto curr = write.tell();
+	auto start_of_data = static_cast<uint32_t>(curr+24);
+
+	write.write_struct(gcf::file_fixed_checksum_footer{manifest.m_header.gcfversion}.ptr());
+	
+	//
+	// data blocks
+	//
+
+	write.write_struct(gcf::data_block{total_blocks,0x2000,start_of_data,total_blocks,0}.calculate_checksum());
+
+	auto pad_stream_to_block = [](std::ostringstream& oss, std::size_t block_size = 0x2000) {
+		std::string current = oss.str();
+		std::size_t current_size = current.size();
+		if (current_size == 0){
+			oss.write(std::string(0x2000, '\0').data(), 0x2000);
+
+		}
+		std::size_t padded_size = ((current_size + block_size - 1) / block_size) * block_size;
+
+		if (current_size < padded_size) {
+			std::size_t padding_size = padded_size - current_size;
+			oss.write(std::string(padding_size, '\0').data(), padding_size);
+		}
+	};
+
+	for (auto [i, entry] : enumerate(manifest.m_direntries)){
+		if (entry.dirtype == 0 or !blocks_per_file[i]) {
+			continue;
+		}
+		std::ostringstream fb(std::ios_base::binary);
+		storage.extract_file(fb, index, entry.fileid);
+		pad_stream_to_block(fb);
+		auto data = fb.str();
+		write.write_string(data);
+	}
+
+	auto fs = static_cast<uint32_t>(write.tell());
+	write.seek(0);
+	write.write_struct(gcf::cache_descriptor{gcf::descriptor_version::current_version,gcf::cache_type::one_file_fixed_block,6,manifest.m_header.cacheid,manifest.m_header.gcfversion,gcf::cache_state::clean,0,fs,0x2000,total_blocks}.compute_checksum());
+}
+
+
+
 int main(int argc, const char* argv[]) {
 	w32::enable_truecolor();
 	argparse::ArgumentParser program(argv[0]);
@@ -414,6 +584,35 @@ int main(int argc, const char* argv[]) {
 	extract_command.add_argument("--v2")
 		.help("treat index as v2")
 		.flag();
+
+	// makegcf
+	auto& makegcf_command = parser("gcf", cc_makegcf);
+	makegcf_command.add_description("storage to gcf");
+
+	makegcf_command.add_argument("storage")
+		.help("the .data file")
+		.required();
+
+	makegcf_command.add_argument("manifest")
+		.help("the .manifest file")
+		.required();
+
+	makegcf_command.add_argument("index")
+		.help("the .index file")
+		.required();
+
+	makegcf_command.add_argument("--key")
+		.help("the decryption key")
+		.default_value(std::string{ "00000000000000000000000000000000" });
+
+	makegcf_command.add_argument("--out")
+		.help("output file")
+		.default_value(std::string{ "./out.gcf" });
+
+
+	makegcf_command.add_argument("checksum")
+		.help("the .checksums file")
+		.required();
 
 	//list
 	auto& list_command = parser("ls", cc_ls);
