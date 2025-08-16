@@ -397,8 +397,10 @@ void cc_makegcf(argparse::ArgumentParser& args){
 	Storage storage(args.get("storage"), key);
 	std::map<uint32_t,uint32_t> blocks_per_file;
 	std::map<uint32_t,uint32_t> file_sizes;
-	uint32_t total_blocks = 0;
+	
+	gcf::bat_block::size_t terminator_type = gcf::bat_block::size_t::e16bit;
 
+	uint32_t total_blocks = 0;
 	for (const auto& [i, entry] : enumerate(manifest.m_direntries)) {
 		if (entry.dirtype == 0)
 			continue;
@@ -419,6 +421,10 @@ void cc_makegcf(argparse::ArgumentParser& args){
 	write.write_struct(gcf::cache_descriptor{gcf::descriptor_version::current_version,gcf::cache_type::one_file_fixed_block,6,manifest.m_header.cacheid,manifest.m_header.gcfversion,gcf::cache_state::clean,0,0,0x2000,total_blocks}.compute_checksum());
 	write.write_struct(gcf::file_fixed_diectory_header{total_blocks,static_cast<uint32_t>(file_sizes.size()),static_cast<uint32_t>(file_sizes.size())-1,{0, 0, 0, 0},0}.compute_checksum());
 	
+	if (total_blocks >= 0xffff){
+		terminator_type = gcf::bat_block::size_t::e32bit;
+	}
+
 	uint32_t current_block = 0;
 	uint32_t written_blocks = 0;
 	gcf::file_fixed_directory_entry empty_block_entry{gcf::block_flags::decrypted_probably,0,0,0,0,total_blocks,total_blocks,0xFFFFFFFF};
@@ -456,7 +462,7 @@ void cc_makegcf(argparse::ArgumentParser& args){
 			write.write_int(frag_idx+1);
 			frag_idx++;
 		}
-		write.write_int(uint32_t{0xffffffff});
+		write.write_int(uint32_t{terminator_type == gcf::bat_block::size_t::e32bit ? 0xffffffff : 0xffff});
 		frag_idx++;
 	}
 	
