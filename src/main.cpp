@@ -450,7 +450,7 @@ void cc_makegcf(argparse::ArgumentParser& args){
 	}
 
 	write.set_endian(endian_type::little);
-	write.write_struct(gcf::bat_block{total_blocks,0,gcf::bat_block::size_t::e32bit,0}.calculate_checksum());
+	write.write_struct(gcf::bat_block{total_blocks,0,terminator_type,0}.calculate_checksum());
 
 	uint32_t frag_idx = 0;
 	uint32_t prev_count = 0;
