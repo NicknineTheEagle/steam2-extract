@@ -1,18 +1,20 @@
 #include <atomic>
 #include <chrono>
+#include <exception>
 #include <fstream>
 #include <iostream>
 #include <print>
 #include <regex>
+#include <ranges>
 
 #include "argparse.hpp"
 #include "BS_thread_pool.hpp"
 #include "steam2.hpp"
 #include "win32console.hpp"
 #include "gcfstructs.hpp"
-#include "enumerate.hpp"
 #include "filewriter.hpp"
 #include "counting_ostream.hpp"
+
 std::vector<char> read_file_to_memory(const std::string& file_name) {
     std::ifstream file(file_name, std::ios::binary | std::ios::ate);
 
@@ -68,7 +70,11 @@ color pallete[] = {
 	{189, 178, 255},
 	{255, 198, 255}
 };
-
+template<typename... Args>
+void println_rgb(color current_color, const std::format_string<Args...> fmt, Args&&... args) {
+	std::print(std::cout, "\033[38;2;{};{};{}m", current_color.r, current_color.g, current_color.b);
+	std::println(std::cout, fmt, std::forward<decltype(args)>(args)...);
+}
 // rainbow :3
 template<typename... Args>
 void pretty_print(const std::format_string<Args...> fmt, Args&&... args) {
@@ -139,9 +145,13 @@ void cc_extract(argparse::ArgumentParser& args) {
 		std::filesystem::create_directories(sanitize_path(final_dir));
 
 		tp.detach_task([&, final, re]() {
-			pretty_print("[thread {}]\textracting file: {}", std::this_thread::get_id(), final.string());
+			pretty_print("[thread {}]\textracting file: {} (id: {})", std::this_thread::get_id(), final.string(), entry.fileid);
 			std::ofstream out(final, std::ios::binary);
-			storage.extract_file(out, index, entry.fileid);
+			try{
+				storage.extract_file(out, index, entry.fileid);
+			} catch(std::exception& ex){
+				println_rgb({255,0,0}, "runner {} hit exception: {}", std::this_thread::get_id(), ex.what());
+			}
 			out.close();
 		});
 	}
@@ -401,7 +411,7 @@ void cc_makegcf(argparse::ArgumentParser& args){
 	gcf::bat_block::size_t terminator_type = gcf::bat_block::size_t::e16bit;
 
 	uint32_t total_blocks = 0;
-	for (const auto& [i, entry] : enumerate(manifest.m_direntries)) {
+	for (const auto& [i, entry] : std::ranges::views::enumerate(manifest.m_direntries)) {
 		if (entry.dirtype == 0)
 			continue;
 		counting_ostream str;
@@ -428,7 +438,7 @@ void cc_makegcf(argparse::ArgumentParser& args){
 	uint32_t current_block = 0;
 	uint32_t written_blocks = 0;
 	gcf::file_fixed_directory_entry empty_block_entry{gcf::block_flags::decrypted_probably,0,0,0,0,total_blocks,total_blocks,0xFFFFFFFF};
-	for (const auto& [i, entry] : enumerate(manifest.m_direntries)) {
+	for (const auto& [i, entry] : std::ranges::views::enumerate(manifest.m_direntries)) {
 		if (entry.dirtype == 0 or not blocks_per_file.contains(i) or not blocks_per_file[i]){
 		//	write.write_struct(&empty_block_entry);
 		//	written_blocks++;
@@ -484,7 +494,7 @@ void cc_makegcf(argparse::ArgumentParser& args){
   		if ( exc_obj_in != (void *)fwrite(this->m_puCacheSearchKeys, 1u, (size_t)exc_obj_in, pFile) )
 	*/
 	uint32_t fuck = 0;
-	for (const auto& [i, entry] : enumerate(manifest.m_direntries)) {
+	for (const auto& [i, entry] : std::ranges::views::enumerate(manifest.m_direntries)) {
 		if (entry.dirtype == 0 or not blocks_per_file.contains(i) or not blocks_per_file[i]) {
 			write.write_int(uint32_t{total_blocks});
 		} else{
@@ -526,7 +536,7 @@ void cc_makegcf(argparse::ArgumentParser& args){
 		}
 	};
 
-	for (auto [i, entry] : enumerate(manifest.m_direntries)){
+	for (auto [i, entry] : std::ranges::views::enumerate(manifest.m_direntries)){
 		if (entry.dirtype == 0 or !blocks_per_file[i]) {
 			continue;
 		}

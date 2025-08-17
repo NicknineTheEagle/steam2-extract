@@ -445,7 +445,7 @@ int Checksum::num_checksums(uint32_t fileid) {
 
 
 uint32_t Checksum::hashblock(char* block, size_t size) {
-	return zng_crc32(0, reinterpret_cast<uint8_t*>(block), size) ^ zng_adler32(0, reinterpret_cast<uint8_t*>(block), size);
+	return static_cast<uint32_t>(zng_crc32(0, reinterpret_cast<uint8_t*>(block), size)) ^ static_cast<uint32_t>(zng_adler32(0, reinterpret_cast<uint8_t*>(block), size));
 }
 
 std::string Index::filetype_to_string(Index::filetype f) {
