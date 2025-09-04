@@ -418,9 +418,9 @@ void cc_makegcf(argparse::ArgumentParser& args){
 		storage.extract_file(str, index, entry.fileid);
 		auto chunk_count = static_cast<uint32_t>(std::ceil(static_cast<float>(str.byte_count()) / static_cast<float>(0x2000)));
 		if (chunk_count == 0){
-			chunk_count ++;
+			//chunk_count ++;
 			std::println("file {} has no chunks? {}", entry.fileid, entry.dirtype);
-			
+			continue;
 		}
 		blocks_per_file[i] = chunk_count;
 		total_blocks += chunk_count;
