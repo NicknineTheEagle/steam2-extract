@@ -78,6 +78,7 @@ namespace steam2 {
 		std::string strtable;
 		std::vector<DirectoryEntry> m_direntries;
 		std::map<uint32_t, std::string> m_stringtable;
+		std::vector<uint32_t> m_copyentries;
 	//public:
 		//std::streamsize m_stringtable{};
 		//std::ifstream m_file;

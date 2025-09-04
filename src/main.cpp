@@ -418,9 +418,9 @@ void cc_makegcf(argparse::ArgumentParser& args){
 		storage.extract_file(str, index, entry.fileid);
 		auto chunk_count = static_cast<uint32_t>(std::ceil(static_cast<float>(str.byte_count()) / static_cast<float>(0x2000)));
 		if (chunk_count == 0){
-			chunk_count ++;
+			//chunk_count ++;
 			std::println("file {} has no chunks? {}", entry.fileid, entry.dirtype);
-			
+			continue;
 		}
 		blocks_per_file[i] = chunk_count;
 		total_blocks += chunk_count;
@@ -448,6 +448,9 @@ void cc_makegcf(argparse::ArgumentParser& args){
 		auto& filetype = index.m_indexes[entry.fileid].m_type;
 		if (filetype == Index::filetype::compressed_and_crypted or filetype == Index::filetype::crypted){
 			filemode = gcf::block_flags::decrypted_probably;
+		}
+		if (std::find(manifest.m_copyentries.begin(), manifest.m_copyentries.end(), i) != manifest.m_copyentries.end()){
+			filemode |= gcf::block_flags::extracted_file;
 		}
 		write.write_struct(gcf::file_fixed_directory_entry{ (gcf::block_flags::used_block | filemode) ,0,0,file_sizes[i],current_block,total_blocks,total_blocks, static_cast<uint32_t>(i)}.ptr());
 		written_blocks++;
