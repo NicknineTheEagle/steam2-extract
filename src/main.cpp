@@ -449,6 +449,9 @@ void cc_makegcf(argparse::ArgumentParser& args){
 		if (filetype == Index::filetype::compressed_and_crypted or filetype == Index::filetype::crypted){
 			filemode = gcf::block_flags::decrypted_probably;
 		}
+		if (std::find(manifest.m_copyentries.begin(), manifest.m_copyentries.end(), i) != manifest.m_copyentries.end()){
+			filemode |= gcf::block_flags::extracted_file;
+		}
 		write.write_struct(gcf::file_fixed_directory_entry{ (gcf::block_flags::used_block | filemode) ,0,0,file_sizes[i],current_block,total_blocks,total_blocks, static_cast<uint32_t>(i)}.ptr());
 		written_blocks++;
 		current_block += blocks_per_file[i];

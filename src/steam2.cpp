@@ -55,6 +55,11 @@ void Manifest::parse_stream(std::istream &s) {
 		m_stringtable[i] = current;
 		i++;	
 	}
+	s.seekg(start_stringtable + m_header.namesize, std::ios::beg);
+	s.seekg(m_header.info1count * sizeof(uint32_t), std::ios::cur);
+	s.seekg(m_header.itemcount * sizeof(uint32_t), std::ios::cur);
+	m_copyentries.resize(m_header.copycount);
+	s.read(reinterpret_cast<char*>(m_copyentries.data()), m_header.copycount * sizeof(uint32_t));
 }
 
 Manifest::~Manifest() {
